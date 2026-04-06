@@ -86,8 +86,8 @@ const VillageScreen = () => {
             <VillageButton
               icon={<MapPin className="w-5 h-5" />}
               label="AVENTURA"
-              sublabel="Estrada Velha"
-              onClick={() => navigate('region')}
+              sublabel="Mapa de Aventuras"
+              onClick={() => navigate('adventure_map')}
               variant="primary"
             />
             <VillageButton
