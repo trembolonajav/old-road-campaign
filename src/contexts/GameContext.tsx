@@ -378,9 +378,11 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!prev.combat) return prev;
       const { goldEarned, xpEarned, lootEarned } = prev.combat;
       const enemyId = prev.combat.enemy.id;
+      const isFirstTrollKill = enemyId === 'e7' && !prev.regionProgress.trollDefeated;
+      const bonusGold = isFirstTrollKill ? 25 : 0;
       let player = {
         ...prev.player,
-        gold: prev.player.gold + goldEarned,
+        gold: prev.player.gold + goldEarned + bonusGold,
         xp: prev.player.xp + xpEarned,
         inventory: lootEarned ? [...prev.player.inventory, lootEarned] : prev.player.inventory,
       };
