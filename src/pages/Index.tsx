@@ -1,16 +1,42 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { GameProvider, useGame } from '@/contexts/GameContext';
+import TitleScreen from '@/components/game/TitleScreen';
+import VillageScreen from '@/components/game/VillageScreen';
+import RegionScreen from '@/components/game/RegionScreen';
+import CombatScreen from '@/components/game/CombatScreen';
+import VictoryScreen from '@/components/game/VictoryScreen';
+import DefeatScreen from '@/components/game/DefeatScreen';
+import ShopScreen from '@/components/game/ShopScreen';
+import InventoryScreen from '@/components/game/InventoryScreen';
 
-// IMPORTANT: Fully REPLACE this with your own code
-const PlaceholderIndex = () => {
-  // PLACEHOLDER: Replace this entire return statement with the user's app.
-  // The inline background color is intentionally not part of the design system.
-  return (
-    <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: '#fcfbf8' }}>
-      <img data-lovable-blank-page-placeholder="REMOVE_THIS" src="/placeholder.svg" alt="Your app will live here!" />
-    </div>
-  );
+const GameRouter = () => {
+  const { state } = useGame();
+
+  switch (state.screen) {
+    case 'title':
+      return <TitleScreen />;
+    case 'village':
+      return <VillageScreen />;
+    case 'region':
+      return <RegionScreen />;
+    case 'combat':
+      return <CombatScreen />;
+    case 'victory':
+      return <VictoryScreen />;
+    case 'defeat':
+      return <DefeatScreen />;
+    case 'shop':
+      return <ShopScreen />;
+    case 'inventory':
+      return <InventoryScreen />;
+    default:
+      return <TitleScreen />;
+  }
 };
 
-const Index = PlaceholderIndex;
+const Index = () => (
+  <GameProvider>
+    <GameRouter />
+  </GameProvider>
+);
 
 export default Index;
