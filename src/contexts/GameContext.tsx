@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { GameState, GameScreen, PlayerState, CombatState, LootItem } from '@/types/game';
+import { GameState, GameScreen, PlayerState, CombatState, LootItem, RegionProgress, MechanicState, Enemy } from '@/types/game';
 import { WEAPONS, ARMORS, SHIELDS, POTION_HEAL } from '@/data/items';
 import { ENEMIES, EnemyData } from '@/data/enemies';
 import { LOOT_TABLE } from '@/data/loot';
@@ -23,6 +23,13 @@ const createNewPlayer = (): PlayerState => ({
   inventory: [],
 });
 
+const createNewProgress = (): RegionProgress => ({
+  clearedCommons: [],
+  alphaDefeated: false,
+  captainDefeated: false,
+  trollDefeated: false,
+});
+
 function randInt(min: number, max: number) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
@@ -31,6 +38,11 @@ function calcDamage(attack: number, defense: number): number {
   const base = Math.max(1, attack - defense);
   const variance = Math.max(1, Math.floor(base * 0.2));
   return base + randInt(-variance, variance);
+}
+
+interface SaveData {
+  player: PlayerState;
+  regionProgress: RegionProgress;
 }
 
 interface GameContextType {
@@ -43,6 +55,7 @@ interface GameContextType {
   totalAttack: number;
   totalDefense: number;
   startCombat: (enemy?: EnemyData) => void;
+  startEncounterIntro: (enemy: EnemyData) => void;
   combatAttack: () => void;
   combatDefend: () => void;
   combatHeavyAttack: () => void;
@@ -61,12 +74,21 @@ export const useGame = () => {
 };
 
 export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [state, setState] = useState<GameState>(() => ({
-    screen: 'title',
-    player: createNewPlayer(),
-    hasSave: !!localStorage.getItem(SAVE_KEY),
-    combat: null,
-  }));
+  const [state, setState] = useState<GameState>(() => {
+    const saved = localStorage.getItem(SAVE_KEY);
+    let hasSave = false;
+    if (saved) {
+      try { JSON.parse(saved); hasSave = true; } catch { /* ignore */ }
+    }
+    return {
+      screen: 'title' as GameScreen,
+      player: createNewPlayer(),
+      hasSave,
+      combat: null,
+      regionProgress: createNewProgress(),
+      pendingEnemy: null,
+    };
+  });
 
   const navigate = useCallback((screen: GameScreen) => {
     setState(prev => ({ ...prev, screen }));
@@ -74,54 +96,72 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const newGame = useCallback(() => {
     const player = createNewPlayer();
-    setState({ screen: 'village', player, hasSave: false, combat: null });
-    localStorage.setItem(SAVE_KEY, JSON.stringify(player));
+    const regionProgress = createNewProgress();
+    const s: GameState = { screen: 'village', player, hasSave: false, combat: null, regionProgress, pendingEnemy: null };
+    setState(s);
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ player, regionProgress }));
   }, []);
 
   const continueGame = useCallback(() => {
     const saved = localStorage.getItem(SAVE_KEY);
     if (saved) {
-      const player = JSON.parse(saved) as PlayerState;
-      setState({ screen: 'village', player, hasSave: true, combat: null });
+      try {
+        const data = JSON.parse(saved) as SaveData;
+        const s: GameState = {
+          screen: 'village',
+          player: data.player,
+          hasSave: true,
+          combat: null,
+          regionProgress: data.regionProgress || createNewProgress(),
+          pendingEnemy: null,
+        };
+        setState(s);
+      } catch { /* ignore */ }
     }
   }, []);
 
   const updatePlayer = useCallback((updates: Partial<PlayerState>) => {
-    setState(prev => {
-      const newPlayer = { ...prev.player, ...updates };
-      return { ...prev, player: newPlayer };
-    });
+    setState(prev => ({ ...prev, player: { ...prev.player, ...updates } }));
   }, []);
 
   const saveGame = useCallback(() => {
-    localStorage.setItem(SAVE_KEY, JSON.stringify(state.player));
+    const data: SaveData = { player: state.player, regionProgress: state.regionProgress };
+    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
     setState(prev => ({ ...prev, hasSave: true }));
-  }, [state.player]);
+  }, [state.player, state.regionProgress]);
 
   useEffect(() => {
     if (state.screen !== 'title') {
-      localStorage.setItem(SAVE_KEY, JSON.stringify(state.player));
+      const data: SaveData = { player: state.player, regionProgress: state.regionProgress };
+      localStorage.setItem(SAVE_KEY, JSON.stringify(data));
     }
-  }, [state.player, state.screen]);
+  }, [state.player, state.regionProgress, state.screen]);
 
   const totalAttack = state.player.baseAttack + state.player.equippedWeapon.bonus;
   const totalDefense = state.player.baseDefense + state.player.equippedArmor.bonus + state.player.equippedShield.bonus;
 
-  // ─── Combat ───────────────────────────────────────────
+  const startEncounterIntro = useCallback((enemy: EnemyData) => {
+    setState(prev => ({ ...prev, screen: 'encounter_intro' as GameScreen, pendingEnemy: enemy }));
+  }, []);
+
+  const initMechanic = (enemy: Enemy): MechanicState | null => {
+    if (!enemy.mechanic) return null;
+    const m = enemy.mechanic;
+    switch (m.type) {
+      case 'howl':
+        return { type: 'howl', triggered: false, bonusTurnsLeft: 0, bonusAttack: m.bonusAttack || 4 };
+      case 'guard_stance':
+        return { type: 'guard_stance', triggered: false, guardActive: false };
+      case 'telegraphed_strike':
+        return { type: 'telegraphed_strike', triggered: false, isCharging: false };
+      default:
+        return null;
+    }
+  };
 
   const startCombat = useCallback((enemy?: EnemyData) => {
-    const commons = ENEMIES.filter(e => e.type === 'common');
-    const elites = ENEMIES.filter(e => e.type === 'elite');
-    const bosses = ENEMIES.filter(e => e.type === 'boss');
-    let chosen: EnemyData;
-    if (enemy) {
-      chosen = enemy;
-    } else {
-      const roll = Math.random();
-      if (roll < 0.65) chosen = commons[randInt(0, commons.length - 1)];
-      else if (roll < 0.90) chosen = elites[randInt(0, elites.length - 1)];
-      else chosen = bosses[randInt(0, bosses.length - 1)];
-    }
+    const chosen = enemy || ENEMIES[0];
+    const mechanic = initMechanic(chosen);
     const combat: CombatState = {
       enemy: { ...chosen },
       enemyHp: chosen.maxHp,
@@ -131,18 +171,84 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       goldEarned: 0,
       xpEarned: 0,
       lootEarned: null,
+      mechanic,
+      turnCount: 0,
     };
-    setState(prev => ({ ...prev, screen: 'combat', combat }));
+    setState(prev => ({ ...prev, screen: 'combat' as GameScreen, combat, pendingEnemy: null }));
   }, []);
+
+  const processMechanicPreTurn = (combat: CombatState): CombatState => {
+    if (!combat.mechanic) return combat;
+    const m = { ...combat.mechanic };
+    const log = [...combat.log];
+    const enemyDef = combat.enemy.mechanic;
+
+    if (m.type === 'howl' && !m.triggered && combat.turnCount === 2) {
+      m.triggered = true;
+      m.bonusTurnsLeft = enemyDef?.bonusTurns || 2;
+      log.push(`⚡ ${combat.enemy.name} uiva! A matilha responde — seu ataque aumenta!`);
+    }
+
+    if (m.type === 'guard_stance' && !m.triggered && combat.turnCount === 1) {
+      m.triggered = true;
+      m.guardActive = true;
+      log.push(`🛡 ${combat.enemy.name} assume postura de guarda. Cuidado com o contra-ataque!`);
+    }
+
+    if (m.type === 'telegraphed_strike' && combat.turnCount >= 2 && combat.turnCount % 3 === 2) {
+      m.isCharging = true;
+      log.push(`⚠ ${combat.enemy.name} ergue o tronco acima da cabeça! DEFENDA-SE!`);
+    }
+
+    return { ...combat, mechanic: m, log };
+  };
+
+  const getEffectiveEnemyAttack = (combat: CombatState): number => {
+    let atk = combat.enemy.attack;
+    if (!combat.mechanic) return atk;
+    const m = combat.mechanic;
+
+    if (m.type === 'howl' && m.bonusTurnsLeft && m.bonusTurnsLeft > 0) {
+      atk += m.bonusAttack || 4;
+    }
+    if (m.type === 'guard_stance' && m.guardActive) {
+      atk = Math.floor(atk * (combat.enemy.mechanic?.counterMultiplier || 1.8));
+    }
+    if (m.type === 'telegraphed_strike' && m.isCharging) {
+      atk = Math.floor(atk * (combat.enemy.mechanic?.heavyDamageMultiplier || 2.5));
+    }
+    return atk;
+  };
+
+  const processMechanicPostTurn = (m: MechanicState): MechanicState => {
+    const next = { ...m };
+    if (next.type === 'howl' && next.bonusTurnsLeft && next.bonusTurnsLeft > 0) {
+      next.bonusTurnsLeft -= 1;
+    }
+    if (next.type === 'guard_stance' && next.guardActive) {
+      next.guardActive = false;
+    }
+    if (next.type === 'telegraphed_strike' && next.isCharging) {
+      next.isCharging = false;
+    }
+    return next;
+  };
 
   const doEnemyTurn = (prev: GameState, tAtk: number, tDef: number): GameState => {
     if (!prev.combat || prev.combat.enemyHp <= 0) return prev;
-    const { combat, player } = prev;
-    const enemyDmg = calcDamage(combat.enemy.attack, tDef);
+    let combat = processMechanicPreTurn(prev.combat);
+    const { player } = prev;
+
+    const effectiveAtk = getEffectiveEnemyAttack(combat);
+    const enemyDmg = calcDamage(effectiveAtk, tDef);
     const reducedDmg = combat.isDefending ? Math.max(1, Math.floor(enemyDmg * 0.5)) : enemyDmg;
     const newHp = Math.max(0, player.hp - reducedDmg);
     const defText = combat.isDefending ? ' (bloqueado!)' : '';
-    const log = [...combat.log, `${combat.enemy.name} ataca e causa ${reducedDmg} de dano${defText}.`];
+    const isHeavyHit = combat.mechanic?.type === 'telegraphed_strike' && combat.mechanic.isCharging;
+    const hitLabel = isHeavyHit ? ' 💥 GOLPE DEVASTADOR!' : '';
+    const log = [...combat.log, `${combat.enemy.name} ataca e causa ${reducedDmg} de dano${defText}.${hitLabel}`];
+
+    const mechanic = combat.mechanic ? processMechanicPostTurn(combat.mechanic) : null;
 
     if (newHp <= 0) {
       const goldLost = Math.floor(player.gold * 0.15);
@@ -150,13 +256,13 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ...prev,
         screen: 'defeat',
         player: { ...player, hp: 0 },
-        combat: { ...combat, log: [...log, 'Você foi derrotado...'], isDefending: false, goldEarned: goldLost },
+        combat: { ...combat, log: [...log, 'Você foi derrotado...'], isDefending: false, goldEarned: goldLost, mechanic, turnCount: combat.turnCount + 1 },
       };
     }
     return {
       ...prev,
       player: { ...player, hp: newHp },
-      combat: { ...combat, log, isDefending: false },
+      combat: { ...combat, log, isDefending: false, mechanic, turnCount: combat.turnCount + 1 },
     };
   };
 
@@ -239,6 +345,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const combatFlee = useCallback(() => {
     setState(prev => {
       if (!prev.combat) return prev;
+      if (prev.combat.enemy.type === 'boss') return prev;
       const chance = prev.combat.enemy.fleeChance;
       if (Math.random() < chance) {
         return { ...prev, screen: 'village' as GameScreen, combat: null };
@@ -270,6 +377,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setState(prev => {
       if (!prev.combat) return prev;
       const { goldEarned, xpEarned, lootEarned } = prev.combat;
+      const enemyId = prev.combat.enemy.id;
       let player = {
         ...prev.player,
         gold: prev.player.gold + goldEarned,
@@ -277,7 +385,16 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         inventory: lootEarned ? [...prev.player.inventory, lootEarned] : prev.player.inventory,
       };
       player = levelUp(player);
-      return { ...prev, screen: 'village' as GameScreen, player, combat: null };
+
+      const rp = { ...prev.regionProgress };
+      if (prev.combat.enemy.type === 'common' && !rp.clearedCommons.includes(enemyId)) {
+        rp.clearedCommons = [...rp.clearedCommons, enemyId];
+      }
+      if (enemyId === 'e5') rp.alphaDefeated = true;
+      if (enemyId === 'e6') rp.captainDefeated = true;
+      if (enemyId === 'e7') rp.trollDefeated = true;
+
+      return { ...prev, screen: 'village' as GameScreen, player, combat: null, regionProgress: rp };
     });
   }, []);
 
@@ -298,7 +415,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <GameContext.Provider value={{
       state, navigate, newGame, continueGame, updatePlayer, saveGame,
       totalAttack, totalDefense,
-      startCombat, combatAttack, combatDefend, combatHeavyAttack, combatPotion, combatFlee,
+      startCombat, startEncounterIntro,
+      combatAttack, combatDefend, combatHeavyAttack, combatPotion, combatFlee,
       claimVictory, acceptDefeat,
     }}>
       {children}
