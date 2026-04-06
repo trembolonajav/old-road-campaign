@@ -7,6 +7,8 @@ import VictoryScreen from '@/components/game/VictoryScreen';
 import DefeatScreen from '@/components/game/DefeatScreen';
 import ShopScreen from '@/components/game/ShopScreen';
 import InventoryScreen from '@/components/game/InventoryScreen';
+import AdventureMapScreen from '@/components/game/AdventureMapScreen';
+import EncounterIntroScreen from '@/components/game/EncounterIntroScreen';
 
 const GameRouter = () => {
   const { state } = useGame();
@@ -16,8 +18,12 @@ const GameRouter = () => {
       return <TitleScreen />;
     case 'village':
       return <VillageScreen />;
+    case 'adventure_map':
+      return <AdventureMapScreen />;
     case 'region':
       return <RegionScreen />;
+    case 'encounter_intro':
+      return <EncounterIntroScreen />;
     case 'combat':
       return <CombatScreen />;
     case 'victory':
