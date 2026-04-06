@@ -44,6 +44,47 @@ export interface Enemy {
   goldReward: [number, number];
   fleeChance: number;
   description: string;
+  mechanic?: EnemyMechanicDef;
+}
+
+export type EnemyMechanicType = 'howl' | 'guard_stance' | 'telegraphed_strike';
+
+export interface EnemyMechanicDef {
+  type: EnemyMechanicType;
+  name: string;
+  description: string;
+  bonusAttack?: number;
+  bonusTurns?: number;
+  counterMultiplier?: number;
+  heavyDamageMultiplier?: number;
+}
+
+export interface MechanicState {
+  type: EnemyMechanicType;
+  triggered: boolean;
+  // howl
+  bonusTurnsLeft?: number;
+  bonusAttack?: number;
+  // guard_stance
+  guardActive?: boolean;
+  // telegraphed
+  isCharging?: boolean;
+}
+
+export interface RoadNode {
+  id: string;
+  name: string;
+  description: string;
+  enemyId: string;
+  type: 'common' | 'elite' | 'boss';
+  unlockCondition: 'start' | 'clear_commons' | 'defeat_alpha' | 'defeat_captain';
+}
+
+export interface RegionProgress {
+  clearedCommons: string[];
+  alphaDefeated: boolean;
+  captainDefeated: boolean;
+  trollDefeated: boolean;
 }
 
 export interface CombatState {
@@ -55,13 +96,17 @@ export interface CombatState {
   goldEarned: number;
   xpEarned: number;
   lootEarned: LootItem | null;
+  mechanic: MechanicState | null;
+  turnCount: number;
 }
 
-export type GameScreen = 'title' | 'village' | 'shop' | 'inventory' | 'region' | 'combat' | 'victory' | 'defeat';
+export type GameScreen = 'title' | 'village' | 'shop' | 'inventory' | 'region' | 'combat' | 'victory' | 'defeat' | 'adventure_map' | 'encounter_intro';
 
 export interface GameState {
   screen: GameScreen;
   player: PlayerState;
   hasSave: boolean;
   combat: CombatState | null;
+  regionProgress: RegionProgress;
+  pendingEnemy: (Enemy & { image: string }) | null;
 }

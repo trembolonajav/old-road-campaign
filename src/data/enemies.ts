@@ -1,4 +1,4 @@
-import { Enemy } from '@/types/game';
+import { Enemy, EnemyMechanicDef } from '@/types/game';
 import ratoCeleiroImg from '@/assets/enemies/rato-celeiro.png';
 import loboMagroImg from '@/assets/enemies/lobo-magro.png';
 import salteadorImg from '@/assets/enemies/salteador.png';
@@ -46,6 +46,13 @@ export const ENEMIES: EnemyData[] = [
     xpReward: 18, goldReward: [10, 18], fleeChance: 0.4,
     description: 'O líder da matilha. Cicatrizes de batalha cobrem seu corpo.',
     image: loboAlfaImg,
+    mechanic: {
+      type: 'howl',
+      name: 'Uivo da Matilha',
+      description: 'O Lobo Alfa uiva e a matilha responde. Seu ataque aumenta por 2 turnos.',
+      bonusAttack: 4,
+      bonusTurns: 2,
+    } as EnemyMechanicDef,
   },
   {
     id: 'e6', name: 'Capitão dos Salteadores', type: 'elite',
@@ -53,12 +60,24 @@ export const ENEMIES: EnemyData[] = [
     xpReward: 22, goldReward: [12, 22], fleeChance: 0.35,
     description: 'Comanda os bandidos da região. Cruel e experiente.',
     image: capitaoSalteadoresImg,
+    mechanic: {
+      type: 'guard_stance',
+      name: 'Postura de Guarda',
+      description: 'O Capitão assume postura defensiva. No próximo turno, contra-ataca com força brutal.',
+      counterMultiplier: 1.8,
+    } as EnemyMechanicDef,
   },
   {
     id: 'e7', name: 'Troll da Ponte', type: 'boss',
     hp: 70, maxHp: 70, attack: 13, defense: 8,
-    xpReward: 50, goldReward: [30, 45], fleeChance: 0.05,
+    xpReward: 50, goldReward: [30, 45], fleeChance: 0,
     description: 'O senhor da ponte velha. Ninguém passa sem pagar... com sangue.',
     image: trollPonteImg,
+    mechanic: {
+      type: 'telegraphed_strike',
+      name: 'Golpe Telegrafado',
+      description: 'O Troll ergue o tronco acima da cabeça. No próximo turno, desfere um golpe devastador.',
+      heavyDamageMultiplier: 2.5,
+    } as EnemyMechanicDef,
   },
 ];
